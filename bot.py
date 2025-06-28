@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 from typing import Optional, Dict, Any
 from datetime import datetime
 import time
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import yt_dlp
 import requests
@@ -28,6 +30,32 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# تعطيل لوغز httpx المزعجة
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
+# HTTP Handler للـ health check
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health' or self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Bot is running!')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        # تعطيل لوغز HTTP server
+        pass
+
+def start_health_server():
+    """بدء HTTP server للـ health check"""
+    port = int(os.environ.get('PORT', 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    logger.info(f"🌐 HTTP server started on port {port}")
+    server.serve_forever()
 
 # تحميل متغيرات البيئة
 load_dotenv()
@@ -58,16 +86,35 @@ SUPPORTED_PLATFORMS = {
 }
 
 async def reset_webhook():
-    """إعادة تعيين webhook للبوت"""
+    """إعادة تعيين webhook وحل مشاكل التعارض"""
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook"
-        response = requests.post(url)
-        if response.status_code == 200:
+        # حذف webhook
+        delete_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook"
+        delete_response = requests.post(delete_url, timeout=10)
+        
+        if delete_response.status_code == 200:
             logger.info("✅ تم حذف webhook بنجاح!")
-            return True
         else:
-            logger.error(f"❌ فشل في حذف webhook: {response.text}")
-            return False
+            logger.warning(f"⚠️ فشل في حذف webhook: {delete_response.text}")
+        
+        # انتظار قصير
+        await asyncio.sleep(2)
+        
+        # حذف التحديثات المعلقة
+        get_updates_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
+        params = {'offset': -1, 'limit': 1, 'timeout': 0}
+        
+        try:
+            clear_response = requests.get(get_updates_url, params=params, timeout=5)
+            if clear_response.status_code == 200:
+                logger.info("✅ تم حذف التحديثات المعلقة!")
+            else:
+                logger.warning(f"⚠️ فشل في حذف التحديثات: {clear_response.text}")
+        except Exception as clear_error:
+            logger.warning(f"⚠️ خطأ في حذف التحديثات: {clear_error}")
+        
+        return True
+        
     except Exception as e:
         logger.error(f"❌ خطأ في إعادة تعيين webhook: {e}")
         return False
@@ -808,12 +855,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """معالج الأخطاء العامة"""
-    logger.warning('Update "%s" caused error "%s"', update, context.error)
+    """معالج الأخطاء العامة مع حل مشاكل التعارض"""
     
     if isinstance(context.error, Conflict):
-        logger.error("تعارض في getUpdates - سيتم إعادة التشغيل...")
+        logger.error("❌ تعارض في getUpdates - يوجد بوت آخر يعمل!")
+        logger.info("🔄 محاولة حل مشكلة التعارض...")
+        
+        # محاولة حل التعارض
+        try:
+            await reset_webhook()
+            await asyncio.sleep(5)  # انتظار أطول
+        except Exception as reset_error:
+            logger.error(f"خطأ في حل التعارض: {reset_error}")
+        
         return
+    
+    # لوغ الأخطاء الأخرى بهدوء
+    if update:
+        logger.warning(f'خطأ في التحديث: {context.error}')
+    else:
+        logger.warning(f'خطأ عام: {context.error}')
     
     # محاولة إرسال رسالة خطأ للمستخدم
     try:
@@ -826,11 +887,21 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.error(f"خطأ في إرسال رسالة الخطأ: {e}")
 
 def main() -> None:
-    """بدء تشغيل البوت"""
+    """بدء تشغيل البوت مع حل مشاكل التعارض"""
     print("🚀 جاري بدء تشغيل بوت التحميل الاحترافي...")
     
-    # تجاهل webhook reset في بيئة الإنتاج لتجنب مشاكل asyncio
-    print("ℹ️ تجاهل webhook reset في بيئة الإنتاج...")
+    # حل مشاكل التعارض قبل بدء البوت
+    print("🔄 حل مشاكل التعارض...")
+    try:
+        asyncio.run(reset_webhook())
+        time.sleep(3)  # انتظار للتأكد
+    except Exception as e:
+        logger.warning(f"⚠️ خطأ في حل التعارض: {e}")
+        print("ℹ️ المتابعة بدون حل التعارض...")
+    
+    # بدء HTTP server في thread منفصل
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
     
     # إنشاء التطبيق
     application = Application.builder().token(BOT_TOKEN).build()

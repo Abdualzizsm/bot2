@@ -5,6 +5,8 @@ services:
     runtime: python-3.11.7
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
+    plan: free
+    numInstances: 1
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
@@ -12,3 +14,5 @@ services:
         sync: false
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: PORT
+        value: "10000"
