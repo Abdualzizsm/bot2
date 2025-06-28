@@ -85,7 +85,7 @@ SUPPORTED_PLATFORMS = {
     'vimeo.com': '🎥 فيميو'
 }
 
-async def reset_webhook():
+def reset_webhook():
     """إعادة تعيين webhook وحل مشاكل التعارض"""
     try:
         # حذف webhook
@@ -98,7 +98,7 @@ async def reset_webhook():
             logger.warning(f"⚠️ فشل في حذف webhook: {delete_response.text}")
         
         # انتظار قصير
-        await asyncio.sleep(2)
+        time.sleep(2)
         
         # حذف التحديثات المعلقة
         get_updates_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
@@ -938,7 +938,7 @@ def main():
     # حل مشاكل التعارض قبل بدء البوت
     print("🔄 حل مشاكل التعارض...")
     try:
-        asyncio.run(reset_webhook())
+        reset_webhook()
         logger.info("✅ تم حل مشاكل التعارض!")
     except Exception as e:
         logger.warning(f"⚠️ خطأ في حل التعارض: {e}")
