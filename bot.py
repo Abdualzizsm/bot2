@@ -18,11 +18,17 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import yt_dlp
 import requests
+from google.generativeai import GenerativeModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaVideo, InputMediaAudio
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode, ChatAction
-from telegram.error import TelegramError, Conflict
+from telegram.error import TelegramError, Conflict, NetworkError, TimedOut
 from dotenv import load_dotenv
+import uuid
+
+# معرف فريد لهذه النسخة من البوت
+BOT_INSTANCE_ID = str(uuid.uuid4())[:8]
+print(f"🆔 Bot Instance ID: {BOT_INSTANCE_ID}")
 
 # إعداد اللوغيغ
 logging.basicConfig(
@@ -946,9 +952,51 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"خطأ في إرسال رسالة الخطأ: {e}")
 
+def check_bot_running():
+    """فحص إذا كان هناك بوت آخر يعمل"""
+    try:
+        # محاولة جلب تحديث فوري لفحص التعارض
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
+        params = {'offset': 0, 'limit': 1, 'timeout': 1}
+        response = requests.get(url, params=params, timeout=5)
+        
+        if response.status_code == 409:  # Conflict
+            return True
+        elif response.status_code == 200:
+            return False
+        else:
+            logger.warning(f"⚠️ رد غير متوقع في فحص البوت: {response.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"خطأ في فحص البوت: {e}")
+        return False
+
 def main():
     """تربط المعالجات وبدء التشغيل البوت مع حل مشاكل التعارض"""
     print("🚀 جاري بدء تشغيل بوت التحميل الاحترافي...")
+    
+    # فحص وجود بوت آخر
+    print("🔍 فحص وجود بوت آخر...")
+    if check_bot_running():
+        print("⚠️ تم اكتشاف بوت آخر يعمل! سيتم إيقافه أولاً...")
+        logger.warning("⚠️ تم اكتشاف بوت آخر يعمل!")
+        
+        # محاولة إيقاف البوت الآخر بقوة
+        for attempt in range(5):
+            print(f"🔄 محاولة إيقاف البوت الآخر ({attempt + 1}/5)...")
+            reset_webhook()
+            time.sleep(10)  # انتظار أطول
+            
+            if not check_bot_running():
+                print("✅ تم إيقاف البوت الآخر بنجاح!")
+                logger.info("✅ تم إيقاف البوت الآخر بنجاح!")
+                break
+            
+            if attempt == 4:
+                print("❌ فشل في إيقاف البوت الآخر! سيتم المتابعة بتجاهل التعارض...")
+                logger.error("❌ فشل في إيقاف البوت الآخر!")
+    else:
+        print("✅ لا يوجد بوت آخر يعمل!")
     
     # حل مشاكل التعارض قبل بدء البوت
     print("🔄 حل مشاكل التعارض...")
