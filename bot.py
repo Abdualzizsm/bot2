@@ -829,12 +829,8 @@ def main() -> None:
     """بدء تشغيل البوت"""
     print("🚀 جاري بدء تشغيل بوت التحميل الاحترافي...")
     
-    # إعادة تعيين webhook
-    try:
-        asyncio.run(reset_webhook())
-    except Exception as e:
-        logger.error(f"خطأ في إعادة تعيين webhook: {e}")
-    time.sleep(2)  # انتظار قصير
+    # تجاهل webhook reset في بيئة الإنتاج لتجنب مشاكل asyncio
+    print("ℹ️ تجاهل webhook reset في بيئة الإنتاج...")
     
     # إنشاء التطبيق
     application = Application.builder().token(BOT_TOKEN).build()
@@ -859,30 +855,16 @@ def main() -> None:
     print("\n🔗 أرسل رابط فيديو للبوت لبدء التحميل!")
     print("⏹️  اضغط Ctrl+C لإيقاف البوت")
     
-    # تشغيل البوت مع retry
-    max_retries = 3
-    retry_count = 0
-    
-    while retry_count < max_retries:
-        try:
-            application.run_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True  # تجاهل التحديثات المعلقة
-            )
-            break
-        except Conflict as e:
-            retry_count += 1
-            logger.error(f"تعارض في البوت (محاولة {retry_count}/{max_retries}): {e}")
-            if retry_count < max_retries:
-                print(f"⏳ إعادة المحاولة خلال {retry_count * 5} ثانية...")
-                time.sleep(retry_count * 5)
-                loop.run_until_complete(reset_webhook())
-            else:
-                print("❌ فشل في تشغيل البوت بعد عدة محاولات!")
-                break
-        except Exception as e:
-            logger.error(f"خطأ عام في تشغيل البوت: {e}")
-            break
+    # تشغيل البوت بشكل مباشر
+    try:
+        print("✅ بدء تشغيل البوت...")
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True  # تجاهل التحديثات المعلقة
+        )
+    except Exception as e:
+        logger.error(f"خطأ في تشغيل البوت: {e}")
+        print(f"❌ فشل في تشغيل البوت: {e}")
 
 if __name__ == '__main__':
     main()
