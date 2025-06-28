@@ -931,14 +931,14 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"خطأ في إرسال رسالة الخطأ: {e}")
 
-async def main():
+def main():
     """تربط المعالجات وبدء التشغيل البوت مع حل مشاكل التعارض"""
     print("🚀 جاري بدء تشغيل بوت التحميل الاحترافي...")
     
     # حل مشاكل التعارض قبل بدء البوت
     print("🔄 حل مشاكل التعارض...")
     try:
-        await reset_webhook()
+        asyncio.run(reset_webhook())
         logger.info("✅ تم حل مشاكل التعارض!")
     except Exception as e:
         logger.warning(f"⚠️ خطأ في حل التعارض: {e}")
@@ -971,26 +971,18 @@ async def main():
     print("\n🔗 أرسل رابط فيديو للبوت لبدء التحميل!")
     print("⏹️  اضغط Ctrl+C لإيقاف البوت")
     
-    # تشغيل البوت بشكل async
+    # تشغيل البوت بالطريقة البسيطة والموثوقة
     try:
         print("✅ بدء تشغيل البوت...")
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling(
+        # استخدام run_polling البسيطة
+        application.run_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            close_loop=False  # مهم لمنع إغلاق event loop
         )
-        # إبقاء البرنامج يعمل
-        await application.updater.idle()
     except Exception as e:
         logger.error(f"خطأ في تشغيل البوت: {e}")
         print(f"❌ فشل في تشغيل البوت: {e}")
-    finally:
-        try:
-            await application.stop()
-            await application.shutdown()
-        except:
-            pass
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
