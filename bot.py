@@ -97,21 +97,36 @@ def reset_webhook():
         else:
             logger.warning(f"⚠️ فشل في حذف webhook: {delete_response.text}")
         
-        # انتظار قصير
-        time.sleep(2)
+        # انتظار أطول لضمان إنهاء العمليات السابقة
+        time.sleep(5)
         
-        # حذف التحديثات المعلقة
+        # حذف التحديثات المعلقة عدة مرات
         get_updates_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
-        params = {'offset': -1, 'limit': 1, 'timeout': 0}
         
-        try:
-            clear_response = requests.get(get_updates_url, params=params, timeout=5)
-            if clear_response.status_code == 200:
-                logger.info("✅ تم حذف التحديثات المعلقة!")
-            else:
-                logger.warning(f"⚠️ فشل في حذف التحديثات: {clear_response.text}")
-        except Exception as clear_error:
-            logger.warning(f"⚠️ خطأ في حذف التحديثات: {clear_error}")
+        for attempt in range(3):  # محاولة 3 مرات
+            try:
+                params = {'offset': -1, 'limit': 100, 'timeout': 0}
+                clear_response = requests.get(get_updates_url, params=params, timeout=10)
+                
+                if clear_response.status_code == 200:
+                    result = clear_response.json()
+                    if result.get('ok') and result.get('result'):
+                        # إذا وجدت تحديثات، احذفها
+                        last_update_id = result['result'][-1]['update_id']
+                        params = {'offset': last_update_id + 1, 'limit': 1, 'timeout': 0}
+                        requests.get(get_updates_url, params=params, timeout=5)
+                        logger.info(f"✅ تم حذف {len(result['result'])} تحديث معلق!")
+                    else:
+                        logger.info("✅ لا توجد تحديثات معلقة!")
+                    break
+                else:
+                    logger.warning(f"⚠️ فشل في حذف التحديثات: {clear_response.text}")
+                    
+            except Exception as clear_error:
+                logger.warning(f"⚠️ خطأ في حذف التحديثات (محاولة {attempt + 1}): {clear_error}")
+                
+            if attempt < 2:  # انتظار قبل المحاولة التالية
+                time.sleep(2)
         
         return True
         
@@ -908,7 +923,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         
         # محاولة حل التعارض
         try:
-            await reset_webhook()
+            reset_webhook()
             await asyncio.sleep(5)  # انتظار أطول
         except Exception as reset_error:
             logger.error(f"خطأ في حل التعارض: {reset_error}")

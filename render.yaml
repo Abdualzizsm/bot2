@@ -7,6 +7,8 @@ services:
     startCommand: python bot.py
     plan: free
     numInstances: 1
+    healthCheckPath: /health
+    autoDeploy: false  # منع النشر التلقائي المتكرر
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
