@@ -125,10 +125,24 @@ class DownloadBot:
     
     def is_supported_url(self, url):
         """فحص إذا كان الرابط مدعوم"""
-        for platform in SUPPORTED_PLATFORMS.keys():
-            if platform in url.lower():
-                return True
-        return False
+        try:
+            # فحص باستخدام yt-dlp مباشرة
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': True,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # محاولة استخراج معلومات بسيطة
+                info = ydl.extract_info(url, download=False)
+                return info is not None
+        except:
+            # فحص تقليدي باستخدام قائمة المنصات
+            for platform in SUPPORTED_PLATFORMS.keys():
+                if platform in url.lower():
+                    return True
+            return False
     
     def get_platform_name(self, url):
         """الحصول على اسم المنصة"""
@@ -137,17 +151,27 @@ class DownloadBot:
                 return name
         return "❓ غير معروف"
     
-    async def get_video_info(self, url):
+    def get_video_info(self, url):
         """الحصول على معلومات الفيديو"""
         try:
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
+                'socket_timeout': 30,
+                'retries': 3,
             }
+            
+            logger.info(f"🔍 تحليل الرابط: {url}")
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                
+                if not info:
+                    logger.error("❌ لم يتم الحصول على معلومات الفيديو")
+                    return None
+                
+                logger.info(f"✅ تم تحليل الفيديو: {info.get('title', 'بدون عنوان')}")
                 
                 return {
                     'title': info.get('title', 'بدون عنوان'),
@@ -157,8 +181,12 @@ class DownloadBot:
                     'thumbnail': info.get('thumbnail', ''),
                     'formats': info.get('formats', [])
                 }
+                
+        except yt_dlp.utils.DownloadError as e:
+            logger.error(f"❌ خطأ في تحميل الفيديو: {e}")
+            return None
         except Exception as e:
-            logger.error(f"خطأ في الحصول على معلومات الفيديو: {e}")
+            logger.error(f"❌ خطأ عام في الحصول على معلومات الفيديو: {e}")
             return None
     
     def progress_hook(self, d, chat_id, message_id, context):
@@ -398,10 +426,27 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     analyzing_msg = await update.message.reply_text("🔍 جاري تحليل الرابط...")
     
     # الحصول على معلومات الفيديو
-    info = await download_bot.get_video_info(url)
+    try:
+        info = download_bot.get_video_info(url)
+    except Exception as e:
+        logger.error(f"خطأ في تحليل الرابط: {e}")
+        await analyzing_msg.edit_text("❌ فشل في تحليل الرابط!\nتأكد من صحة الرابط وحاول مرة أخرى.")
+        return
     
     if not info:
-        await analyzing_msg.edit_text("❌ فشل في تحليل الرابط!\nتأكد من صحة الرابط وحاول مرة أخرى.")
+        platform_list = "\n".join([f"• {name}" for name in SUPPORTED_PLATFORMS.values()])
+        error_msg = f"""❌ فشل في تحليل الرابط!
+
+🔍 الأسباب المحتملة:
+• الرابط غير صحيح أو معطل
+• الفيديو غير متاح أو محذوف
+• مشاكل في الاتصال بالإنترنت
+
+🌐 المنصات المدعومة:
+{platform_list}
+
+🔄 يرجى المحاولة مرة أخرى بعد قليل."""
+        await analyzing_msg.edit_text(error_msg)
         return
     
     # عرض معلومات الفيديو
