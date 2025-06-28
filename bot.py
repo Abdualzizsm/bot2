@@ -931,15 +931,15 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"خطأ في إرسال رسالة الخطأ: {e}")
 
-def main() -> None:
-    """بدء تشغيل البوت مع حل مشاكل التعارض"""
+async def main():
+    """تربط المعالجات وبدء التشغيل البوت مع حل مشاكل التعارض"""
     print("🚀 جاري بدء تشغيل بوت التحميل الاحترافي...")
     
     # حل مشاكل التعارض قبل بدء البوت
     print("🔄 حل مشاكل التعارض...")
     try:
-        asyncio.run(reset_webhook())
-        time.sleep(3)  # انتظار للتأكد
+        await reset_webhook()
+        logger.info("✅ تم حل مشاكل التعارض!")
     except Exception as e:
         logger.warning(f"⚠️ خطأ في حل التعارض: {e}")
         print("ℹ️ المتابعة بدون حل التعارض...")
@@ -971,16 +971,26 @@ def main() -> None:
     print("\n🔗 أرسل رابط فيديو للبوت لبدء التحميل!")
     print("⏹️  اضغط Ctrl+C لإيقاف البوت")
     
-    # تشغيل البوت بشكل مباشر
+    # تشغيل البوت بشكل async
     try:
         print("✅ بدء تشغيل البوت...")
-        application.run_polling(
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True  # تجاهل التحديثات المعلقة
+            drop_pending_updates=True
         )
+        # إبقاء البرنامج يعمل
+        await application.updater.idle()
     except Exception as e:
         logger.error(f"خطأ في تشغيل البوت: {e}")
         print(f"❌ فشل في تشغيل البوت: {e}")
+    finally:
+        try:
+            await application.stop()
+            await application.shutdown()
+        except:
+            pass
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
