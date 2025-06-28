@@ -2,6 +2,7 @@ services:
   - type: web
     name: telegram-bot
     env: python
+    runtime: python-3.11.7
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
@@ -9,3 +10,5 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"

@@ -831,12 +831,9 @@ def main() -> None:
     
     # إعادة تعيين webhook
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    loop.run_until_complete(reset_webhook())
+        asyncio.run(reset_webhook())
+    except Exception as e:
+        logger.error(f"خطأ في إعادة تعيين webhook: {e}")
     time.sleep(2)  # انتظار قصير
     
     # إنشاء التطبيق
