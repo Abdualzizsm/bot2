@@ -1,20 +1,11 @@
 services:
   - type: web
-    name: telegram-bot
+    name: simple-chatbot
     env: python
-    runtime: python-3.11.7
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
-    plan: free
-    numInstances: 1
-    healthCheckPath: /health
-    autoDeploy: false  # منع النشر التلقائي المتكرر
+    startCommand: python simple_bot.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: PYTHONUNBUFFERED
-        value: "1"
-      - key: PORT
-        value: "10000"
