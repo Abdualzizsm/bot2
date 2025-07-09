@@ -84,12 +84,16 @@ def webhook():
     """استقبال التحديثات من Telegram"""
     try:
         json_data = request.get_json()
+        logger.info(f"📲 Webhook received: {json_data is not None}")
+        
         if json_data:
             update = Update.de_json(json_data, telegram_app.bot)
             asyncio.create_task(telegram_app.process_update(update))
+            logger.info("✅ Update processed")
+        
         return "OK", 200
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
+        logger.error(f"❌ Webhook error: {e}")
         return "Error", 500
 
 @app.route('/')
@@ -108,7 +112,8 @@ def status():
 
 async def setup_webhook():
     """إعداد webhook"""
-    webhook_url = f"https://simple-chatbot.onrender.com/webhook/{BOT_TOKEN}"
+    # استخدام URL الصحيح من Render
+    webhook_url = f"https://bot2-zak5.onrender.com/webhook/{BOT_TOKEN}"
     
     try:
         # حذف أي webhook سابق
