@@ -13,6 +13,7 @@ pip install -r requirements.txt
 ```
 TELEGRAM_BOT_TOKEN=your_token
 GEMINI_API_KEY=your_key
+REBUILD_DATE=2025-07-09
 ```
 
 3. شغل البوت:
