@@ -3,7 +3,7 @@ services:
     name: simple-chatbot
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python render_bot.py
+    startCommand: python simple_render.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
