@@ -1,5 +1,6 @@
 import os
 import logging
+import telegram
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
@@ -90,11 +91,16 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
     
-    # تشغيل البوت مع حل التعارض
+    # تشغيل البوت مع حل شامل للتعارض
     app.run_polling(
         drop_pending_updates=True,
-        allowed_updates=['message'],
-        close_loop=False
+        allowed_updates=['message', 'edited_message'],
+        timeout=30,
+        bootstrap_retries=3,
+        read_timeout=30,
+        write_timeout=30,
+        connect_timeout=30,
+        pool_timeout=30
     )
 
 if __name__ == '__main__':
