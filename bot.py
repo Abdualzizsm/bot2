@@ -60,6 +60,17 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error processing message: {str(e)}")
         await update.message.reply_text(f"عذراً، حدث خطأ: {str(e)}")
 
+async def conflict_resolver():
+    """حل مشكلة التعارض مع البوتات الأخرى"""
+    try:
+        from telegram import Bot
+        bot = Bot(token=BOT_TOKEN)
+        await bot.delete_webhook()
+        await bot.get_updates(offset=-1)
+        logger.info("Conflict resolved: Webhook deleted and pending updates cleared")
+    except Exception as e:
+        logger.error(f"Error resolving conflict: {e}")
+
 def main():
     """تشغيل البوت"""
     # تحقق من مفاتيح API
@@ -69,7 +80,7 @@ def main():
     if not GEMINI_API_KEY:
         logger.error("GEMINI_API_KEY not found!")
         return
-        
+    
     logger.info("Starting bot...")
     
     # إنشاء التطبيق
@@ -79,8 +90,12 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
     
-    # تشغيل البوت
-    app.run_polling()
+    # تشغيل البوت مع حل التعارض
+    app.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=['message'],
+        close_loop=False
+    )
 
 if __name__ == '__main__':
     main()
