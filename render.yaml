@@ -3,7 +3,7 @@ services:
     name: simple-chatbot
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python webhook_bot.py
+    startCommand: python main.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
