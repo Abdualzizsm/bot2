@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Simple Telegram Bot - WEBHOOK ONLY (No Conflicts!)
+Telegram Bot for Render - Fixed Threading Issues
 """
 import os
 import logging
+import asyncio
+import threading
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 import google.generativeai as genai
 from flask import Flask, request
-import asyncio
-import json
 
 # إعداد logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -24,11 +24,6 @@ BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') 
 PORT = int(os.environ.get('PORT', 10000))
 
-# التحقق من وجود المتغيرات
-if not BOT_TOKEN or not GEMINI_API_KEY:
-    logger.error("Missing environment variables!")
-    exit(1)
-
 # إعداد Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
@@ -39,8 +34,9 @@ chats = {}
 # Flask app
 app = Flask(__name__)
 
-# Telegram app (سيتم إعداده لاحقاً)
+# Telegram app
 telegram_app = None
+async_loop = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """بداية المحادثة"""
@@ -51,54 +47,54 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 اكتب لي أي سؤال وسأجيبك فوراً!"""
     
     await update.message.reply_text(welcome_text)
-    logger.info(f"New user started: {update.effective_user.id}")
 
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة الرسائل"""
     user_id = update.effective_user.id
     user_message = update.message.text
     
-    logger.info(f"Message from {user_id}: {user_message[:50]}...")
+    logger.info(f"💬 Message from {user_id}: {user_message[:50]}...")
     
-    # إنشاء محادثة جديدة إذا لم تكن موجودة
     if user_id not in chats:
         chats[user_id] = model.start_chat(history=[])
     
     try:
-        # إظهار أن البوت يكتب
         await update.message.chat.send_action('typing')
-        
-        # إرسال الرسالة إلى Gemini
         response = await chats[user_id].send_message_async(user_message)
-        
-        # إرسال الرد
         await update.message.reply_text(response.text)
-        logger.info(f"Reply sent to {user_id}")
+        logger.info(f"✅ Reply sent to {user_id}")
         
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"❌ Chat error: {e}")
         await update.message.reply_text("عذراً، حدث خطأ. حاول مرة أخرى.")
+
+def process_update_sync(update_data):
+    """معالجة التحديث بشكل متزامن"""
+    try:
+        update = Update.de_json(update_data, telegram_app.bot)
+        # تشغيل في event loop منفصل
+        asyncio.run_coroutine_threadsafe(
+            telegram_app.process_update(update), 
+            async_loop
+        )
+        logger.info("✅ Update processed successfully")
+    except Exception as e:
+        logger.error(f"❌ Process update error: {e}")
 
 @app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
 def webhook():
     """استقبال التحديثات من Telegram"""
     try:
         json_data = request.get_json()
-        logger.info(f"📲 Webhook received: {json_data is not None}")
+        logger.info("📲 Webhook received")
         
         if json_data:
-            update = Update.de_json(json_data, telegram_app.bot)
-            
-            # إصلاح مشكلة event loop
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # تشغيل التحديث بشكل صحيح
-            loop.create_task(telegram_app.process_update(update))
-            logger.info("✅ Update processed")
+            # معالجة في thread منفصل
+            threading.Thread(
+                target=process_update_sync, 
+                args=(json_data,),
+                daemon=True
+            ).start()
         
         return "OK", 200
     except Exception as e:
@@ -107,61 +103,66 @@ def webhook():
 
 @app.route('/')
 def health():
-    """فحص صحة الخدمة"""
-    return f"🤖 Bot is running on port {PORT}", 200
+    return "🤖 Bot is running!", 200
 
-@app.route('/status')
+@app.route('/status')  
 def status():
-    """حالة البوت"""
-    return {
-        "status": "running",
-        "users": len(chats),
-        "port": PORT
-    }
+    return {"status": "running", "users": len(chats)}
 
 async def setup_webhook():
     """إعداد webhook"""
-    # استخدام URL الصحيح من Render
     webhook_url = f"https://bot2-zak5.onrender.com/webhook/{BOT_TOKEN}"
     
     try:
-        # حذف أي webhook سابق
         await telegram_app.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Old webhook deleted")
-        
-        # إعداد webhook جديد
-        await telegram_app.bot.set_webhook(
-            url=webhook_url,
-            allowed_updates=["message", "edited_message"]
-        )
+        await telegram_app.bot.set_webhook(url=webhook_url)
         logger.info(f"✅ Webhook set: {webhook_url}")
-        
         return True
     except Exception as e:
         logger.error(f"❌ Webhook setup failed: {e}")
         return False
 
+def run_async_loop():
+    """تشغيل event loop في thread منفصل"""
+    global async_loop
+    async_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(async_loop)
+    
+    async def keep_alive():
+        while True:
+            await asyncio.sleep(1)
+    
+    async_loop.run_until_complete(keep_alive())
+
 def main():
     """تشغيل البوت"""
     global telegram_app
     
-    logger.info("🚀 Starting Telegram Bot...")
+    if not BOT_TOKEN or not GEMINI_API_KEY:
+        logger.error("❌ Missing API keys!")
+        return
+    
+    logger.info("🚀 Starting Render bot...")
     
     # إنشاء Telegram application
     telegram_app = Application.builder().token(BOT_TOKEN).build()
-    
-    # إضافة المعالجات
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
     
+    # تشغيل async loop في thread منفصل
+    loop_thread = threading.Thread(target=run_async_loop, daemon=True)
+    loop_thread.start()
+    
+    # انتظار حتى يكون async_loop جاهز
+    import time
+    time.sleep(2)
+    
     # إعداد webhook
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(setup_webhook())
+    asyncio.run_coroutine_threadsafe(setup_webhook(), async_loop)
     
     logger.info(f"✅ Bot ready on port {PORT}")
     
-    # تشغيل Flask server
+    # تشغيل Flask
     app.run(host='0.0.0.0', port=PORT, debug=False)
 
 if __name__ == '__main__':
